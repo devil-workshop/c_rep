@@ -15,40 +15,318 @@
 
 int mboxbrdrclr,mboxbgclr,mboxfgclr;  //To set colors for all messages boxes
 
-int menutxtbgclr,menutxtfgclr,appframeclr;
+int menutxtbgclr,menutxtfgclr,appframeclr;  //to set the frame and color of menu items
 
+int section1_symb,section1_bgclr,section1_fgclr;  //to set the color of section 1, the region around menu option
 
+int section2_symb,section2_bgclr,section2_fgclr;  //to set the color of section 2, the region on right of the menu option
 
+int fEdit;
 
+int animcounter;
 
+static struct struct_stock  //main db structure
+{
+	char itemcode[8];
+	char itemname[50];
+	float itemrate;
+	float itemqty;
+	int minqty;  //used for re order level
+}inv_stock;
 
+struct struct_bill
+{
+	char itemcode[8];
+	char itemname[50];
+	float itemrate;
+	float itemqty;
+	float itemtot;
+}item_bill;
 
+char password[8];
 
+const long int stocksize=sizeof(inv_stock); //stores the size of struck_stock
 
+float tot_investment;
+int numItems;  //to count the no. of items
+int button,column,row;  //to allow mouse operations inthe applications
 
+FILE *dbfp //controls db file operations in the applications
 
+int main(void)
+{
+	float issued_qty;
+	char userchioce,code[8];
+	int flag,i,itemsold;
+	float getInvestmentInfo(void);
+	FILE *ft;
+	int result;
+	getConfiguration();
+	
+	//opens and set'dbfp' globally so it gets acessessable from any where
+	
+	dbfp=fopen("d:\invstock.debagnik","r+");
+	if(dbfp==NULL)
+	{
+		clrscr();
+		printf("Database does not exists\nPress Enter key to create one\nTo exit, Press any other key\n");
+		fflush(stdin);
+		if(getch()==13)
+		{
+			dbfp=fopen("invstock.debagnik","w+");
+			printf("The Database has been created you must restart the application/npress any key to continue...");
+			fflush(stdin);
+			getch();
+			exit(0);
+		}
+		else
+		{
+			exit(0);
+		}
+	}
+	//application will only reach if the db oped sucessfully
+	if(initmouse()==0)
+	{
+		messagebox(10,33,"mouse couldnot be loaded","Error",'',mboxbrdrclr,mboxbgclr,mboxfgclr,0);
+		showmouseptr();
+		_setcursortype(_NOCURSOR);
+	}
+	
+	while(1)
+	{
+		clrscr();
+		fEdit=FALSE;
+		ShowMenu();
+		numItems();
+		rewind();
+		
+		//to calculate the no. of record in db
+		
+		while(fread(&inv_stock,stocksize,1,dbfp)==1)
+			++numItems;
+		textcolor(menutxtfgclr);
+		textbackground(menutxtbgclr);
+		gotopos(23,1);
+		cprintf("Total items in stock: %d",numItems);
+		textcolor(BLUE);
+		textbackground(BROWN);
+		fflush();
+		
+		// The application will wait for user response
+		
+		userchoice=getUserResponse();
+		switch(userchoice)
+		{
+			case '0':
+				//to close application
+				BackupDatabase();
+				flushall();
+				fclose(dbfp);
+				fcloseall();
+				print2screen(12,40,"Thanks for using the applicstion\ninvmansysV2.0\nMade By Debagnik Kar",BROWN,BLUE,0);
+				sleep(1);
+				setdefaultmode();
+				exit(0);
+			case '1':
+				if(getdata()==1)
+				{
+					fseek(dbfp,0,SEEK_END);
+					//write the items information into the db
+					fwrite(&inv_stock,stocksize,1,dbfp);
+					print2screen(13,33,"the item has sucessfully added. ",BROWN,BLUE,0);
+					getch();
+				}
+				break;
+			case '2':
+				print2screen(2,33,"Enter Item code>",BROWN,BLUE,0);
+				gotopos(2,54);
+				fflush(stdin);
+				scanf("%s",&code);
+				fEdit=TRUE;
+				if(CheckId(code)==0)
+				{
+					if(messagebox(0,33,"press Enter Key to edit the item.","Confirm",'',mboxbrdrclr,mboxbgclr,mboxfgclr,0)!=13)
+					{
+						messagebox(10,33,"This item Information cannot be modified. Please try again","Edit",'',mboxbrdrclr,mboxbgclr,mboxfgclr,0);
+						fEdit=FALSE;
+						break;
+					}
+					fEdit=TRUE;
+					getdata();
+					fflush(stdin);
+					fseek(dbfp,-stocksize,SEEK_CUR);
+					fwrite(&inv_stock,stocksize,1,dbfp);
+				}
+				else
+				   messagebox(10,33,"The item is not available in the database.","No records found",'',mboxbrdrclr,mboxbgclr,mboxfgclr);
+				   fEdit=FALSE;
+				   break;
+			case '3'://to show info
+				print2screen(2,33,"Enter Item code: ",BROWN,BLUE);
+				scanf("%s",&code);
+				flag=0;
+				rewind(dbfp);
+				while(fread(&inv_stock,stocksize,1,dbfp)==1)
+				{
+					if(strcmp(inv_stock.itemcode,code)==0)
+					{
+						DisplayItemInfo();
+						flag=1;
+					}
+				}
+				if(flag==0)
+				   messagebox(10,33,"The item is not available.","No record found ",'',mboxbrdrclr,mboxbgclr,mboxfgclr,0);
+				   break;
+				//To show information about all items in the db
+				case '4':
+					if(numItems==0)
+					   messagebox(10,33,"No items are available.","Error",'',mboxbrdrclr,mboxbgclr,mboxfgclr,0);
+					textcolor(BLUE);
+					textbackground(BROWN);
+					gotopos(3,33);
+					cprintf("Number of Items Available in Stock: %d",numItems);
+					gotopos(4,33);
+					getInvestmentInfo();
+					cprintf("Total Investment : Rs%.2f",tot_investment);
+					gotopos(5,33);
+					cprintf("Press Enter to view. Otherwise Press Any Key...");
+					fflush(stdin);
+					if(getch()==13)
+					{
+						rewind(dbfp);
+						while(fread(&inv_stock,stocksize,1,dbfp)==1);//lists all record
+						  DisplayItemRecord(inv_stock.itemcode);
+				    }
+				    textcolor(BLUE);
+				     break;
+				// to issue items
+				case '5':
+					itemssold=0;
+					i=0;
+					top:
+						print2screen(3,33,"Enter Items Code:",BROWN,BLUE,0);
+						fflush(stdin);
+						gotopos(3,55);
+						scanf("%s",&code);
+						if(CheckId(code)==1)
+						  if(messagebox(10,33,"The item is not available.","No records found",'',mboxbrdrclr,mboxbgclr,mboxfgclr,0)==13)
+						  
+						    goto top;
+						  else
+						    goto bottom;
+					    
+					    rewind(dbfp);
+					    while(fread(&inv_stock,stocksize,1,dbfp)==1)
+					    {
+					    	if(strcmp(inv_stock.itemcode,code)==0) //to check if the item code is available
+					    	{
+					    		issued_qty=IssueItem();
+					    		if(issued_qty>0)
+					    		{
+					    			itemsold+=1;
+					    			strcpy(item_bill[i].itemcode,inv_stock.itemcode);
+					    			srtcpy(item_bill[i].itemname.inv_stock.itemname);
+					    			item_bill[i].itemqty=issue_qty;
+					    			item_bill[i].itemrate=inv_stock.itemrate;
+					    			item_bill[i].itemtot=inv_stock.itemrate*issue_qty;
+					    			i+=1;
+								}
+								print2screen(19,33,"Would you like to issue another item (y/n)?",BROWN,BLUE,0);
+								fflush(stdin);
+								gotopos(19,45);
+								if(toupper(getch())=='y'||topper(getch())=='Y')
+								  goto top;
+								  bottom;
+								break;
+							}
+						}
+						break;
+				//items to order
+				case'6':
+					if(numItems<=0)
+					{
+						messagebox(10,33,"No items are available.","Items Not Found",'',mboxbrdrclr,mboxbgclr,mboxfgclr,0);
+						break;	
+					}
+					print2screen(3,33,"Stock of these items is on the medium level:",BROWN,RED,0);
+					fflush(stdin);
+					flag=0;
+					fflush(stdin);
+					rewind(dbfp);
+					
+					while(fread(&inv_stock,stocksize,1,dbfp)==1)
+					{
+						if(inv_stock.itemqty<=inv_stock.minqty)
+						{
+							DisplayItemInfo();
+							flag=1;
+						}
+					}
+					if(flag==0)
+						messagebox(10,33,"No Items is currently at reorder level.","Reorder Items",'',mboxbrdrclr,mboxbgclr,mboxfgclr);
+						break;
+			default:
+				messagebox(10,33,"The option you have entered is not available.","Invalid Option",'',mboxbrdrclr,mboxbgclr,mboxfgclr,0);
+				break;
+		}
+	}
+}
+ShowMenu()//Display Menu & Skins
+{
+	if(section1_bgclr != BROWN || section1_symb != ' ')
+	   fillcolor(2,1,23,39,section1_symb,section1_bgclr,section1_fgclr,0);
+	if(section2_bgclr != BROWN || section2_symb != ' ')
+	   fillcolor(2,40,23,79,section2_symb,section2_bgclr,section2_fgclr,0);
+	print2screen(2,2,"1: Add an item",menutxtbgclr,menutxtfgclr,0);
+	print2screen(4,2,"2: Edit item Information",menutxtbgclr,menutxtfgclr,0);
+	print2screen(6,2,"3: Show Item Information",menutxtbgclr,menutxtfgclr,0);
+	print2screen(8,2,"4: View Stock Report",menutxtbgclr,menutxtfgclr,0);
+	print2screen(10,2,"5: Issue Items from Stock",menutxtbgclr,menutxtfgclr,0);
+	print2screen(12,2,"6: View Items to be ordered ",menutxtbgclr,menutxtfgclr,0);
+	print2screen(14,2,"0: Close the application",menutxtbgclr,menutxtfgclr,0);
+	
+	htskin(0,0,' ',80,appframeclr,LIGHTGREEN,0);
+	htskin(1,0,' ',80,appframeclr,LIGHTGREEN,0);
+	vtskin(0,0,' ',24,appframeclr,LIGHTGREEN,0);
+	vtskin(0,79,' ',24,appframeclr,LIGHTGREEN,0);
+	htskin(24,0,' ',80,appframeclr,LIGHTGREEN,0);
+	vtskin(0,31,' ',24,appframeclr,LIGHTGREEN,0);
+	return;
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+//Wait for responses from user
+getUserResponse()
+{
+	int ch,i;
+	animcounter=0;
+	
+	while(!kbhit())
+	{
+		getmousepos(&button,&row,&column);
+		
+		//to show animation
+		BlinkText(0,27,"Inventory Manegment System",1,YELLOW,RED,LIGHTGREY,0,50);
+		animcounter+=1;
+		
+		i++;
+		if(button==1 && row==144 && columm>=16 &&column<=72)
+		   return (0);
+		if(button==1 && row==16 && columm>=16 &&column<=136)
+		   return (1);
+		if(button==1 && row==32 && columm>=16 &&column<=144)
+		   return (2);
+		if(button==1 && row==48 && columm>=16 &&column<=160)
+		   return (3);
+		if(button==1 && row==64 && columm>=16 &&column<=104)
+		   return (4);
+		if(button==1 && row==80 && columm>=16 &&column<=144)
+		   return (5);
+		if(button==1 && row==96 && columm>=16 &&column<=152)
+		   return (6);
+	}
+	ch=getch();
+	return ch;
+}
 //reads a valid id and its information , returns 0 if already exists 
 
 getdata()
@@ -216,6 +494,8 @@ struct colors
 	int menutxtbgclr;
 	int menutxtfgclr;
 	int appframeclr;
+	
+/*Made by Debagnik Kar*/
 	
 	int section1_symb;
 	int section1_bgclr;
