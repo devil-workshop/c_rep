@@ -65,7 +65,7 @@ int main(void)
 	
 	//opens and set'dbfp' globally so it gets acessessable from any where
 	
-	dbfp=fopen("d:\invstock.debagnik","r+");
+	dbfp=fopen("d:/invstock.debagnik","r+");
 	if(dbfp==NULL)
 	{
 		clrscr();
